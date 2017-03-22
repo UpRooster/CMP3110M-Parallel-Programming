@@ -4,6 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
+#include <string>
+#include <iomanip>
 
 #ifdef __APPLE__
 #include <OpenCL/cl.hpp>
@@ -39,9 +41,11 @@ vector<mytype> readFile(std::ifstream &ifs) {
 		// Get line from input string stream
 		std::istringstream iss(line);
 		std::size_t found = line.find_last_of(" ");
-		std::string val = line.substr(found + 1);
-		InF.push_back(std::stof(val));
+		float val = std::stof(line.substr(found + 1));
+		// cout << std::setprecision(2) << std::fixed << val << " ";
+		InF.push_back(val * 10);
 	}
+	// cout << InF;
 	return InF;
 }
 
@@ -102,6 +106,7 @@ int main(int argc, char **argv) {
 		msP = set_time();
 		readFile(ifs);
 		get_time(msP);
+		// Statistical Analysis
 		system("pause");
 		//the following part adjusts the length of the input vector so it can be run for a specific workgroup size
 		//if the total input length is divisible by the workgroup size
@@ -138,7 +143,7 @@ int main(int argc, char **argv) {
 		queue.enqueueFillBuffer(buffer_B, 0, 0, output_size);//zero B buffer on device memory
 
 		//5.2 Setup and execute all kernels (i.e. device code)
-		cl::Kernel kernel_1 = cl::Kernel(program, "reduce_add_1");
+		cl::Kernel kernel_1 = cl::Kernel(program, "reduce_add_4");
 		kernel_1.setArg(0, buffer_A);
 		kernel_1.setArg(1, buffer_B);
 		kernel_1.setArg(2, cl::Local(local_size*sizeof(mytype)));//local memory size
@@ -151,9 +156,11 @@ int main(int argc, char **argv) {
 
 		std::cout << "A = " << A << std::endl;
 		std::cout << "B = " << B << std::endl;
+		system("pause");
 	}
 	catch (cl::Error err) {
 		std::cerr << "ERROR: " << err.what() << ", " << getErrorString(err.err()) << std::endl;
+		system("pause"); // Pause to see error
 	}
 
 	return 0;
