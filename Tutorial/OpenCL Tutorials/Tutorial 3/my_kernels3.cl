@@ -122,7 +122,7 @@ __kernel void reduce_add_5(__global const int* A, __global int* B, __local int* 
 }
 
 //a very simple histogram implementation
-__kernel void hist_simple(__global const int* A, __global int* H, int nr_bins) { 
+/*__kernel void hist_simple(__global const int* A, __global int* H, int nr_bins) { 
 	int id = get_global_id(0);
 
 	//assumes that H has been initialised to 0
@@ -132,7 +132,7 @@ __kernel void hist_simple(__global const int* A, __global int* H, int nr_bins) {
 		int bin_index = nr_bins - 1;
 
 	atomic_inc(&H[bin_index]);//serial operation, not very efficient!
-}
+}*/
 
 //a double-buffered version of the Hillis-Steele inclusive scan
 //requires two additional input arguments which correspond to two local buffers

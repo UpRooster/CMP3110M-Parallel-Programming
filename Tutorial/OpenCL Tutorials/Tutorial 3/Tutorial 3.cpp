@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <chrono>
 
 #ifdef __APPLE__
 #include <OpenCL/cl.hpp>
@@ -11,7 +12,7 @@
 #endif
 
 #include "Utils.h"
-
+typedef int mytype;
 void print_help() {
 	std::cerr << "Application usage:" << std::endl;
 
@@ -21,10 +22,35 @@ void print_help() {
 	std::cerr << "  -h : print this message" << std::endl;
 }
 
+float set_time() {
+	float msP = chrono::duration_cast<chrono::milliseconds>(chrono::steady_clock::now().time_since_epoch()).count();
+	return msP;
+}
+void get_time(float msP) {
+	float msN = chrono::duration_cast<chrono::milliseconds>(chrono::steady_clock::now().time_since_epoch()).count();
+	float msD = msN - msP;
+	std::cout << "Time Elapsed[ms]: " << msD << endl;
+}
+vector<mytype> readFile(std::ifstream &ifs) {
+	std::string line;
+	std::vector<mytype> InF;
+	while (std::getline(ifs, line))
+	{
+		// Get line from input string stream
+		std::istringstream iss(line);
+		std::size_t found = line.find_last_of(" ");
+		std::string val = line.substr(found + 1);
+		InF.push_back(std::stof(val));
+	}
+	return InF;
+}
+
+// MAIN CLASS
 int main(int argc, char **argv) {
 	//Part 1 - handle command line options such as device selection, verbosity, etc.
 	int platform_id = 0;
 	int device_id = 0;
+	float msP;
 
 	for (int i = 1; i < argc; i++)	{
 		if ((strcmp(argv[i], "-p") == 0) && (i < (argc - 1))) { platform_id = atoi(argv[++i]); }
@@ -63,12 +89,20 @@ int main(int argc, char **argv) {
 			throw err;
 		}
 
-		typedef int mytype;
-
 		//Part 4 - memory allocation
 		//host - input
 		std::vector<mytype> A = {1,4,2,6,8,4,2,7,5,8};//allocate 10 elements with an initial value 1 - their sum is 10 so it should be easy to check the results!
+		std::vector<mytype> InF;
 
+		// Input File
+		std::cout << "Loading Input" << std::endl;
+		std::ifstream ifs("temp_lincolnshire.txt", std::ifstream::in);
+		// Strip Values
+		std::cout << "Acquiring Values" << std::endl;
+		msP = set_time();
+		readFile(ifs);
+		get_time(msP);
+		system("pause");
 		//the following part adjusts the length of the input vector so it can be run for a specific workgroup size
 		//if the total input length is divisible by the workgroup size
 		//this makes the code more efficient
