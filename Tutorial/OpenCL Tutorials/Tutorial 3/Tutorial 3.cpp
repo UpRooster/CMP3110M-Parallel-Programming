@@ -121,17 +121,20 @@ int main(int argc, char **argv) {
 		// Buffers for Kernel Operations
 		std::vector<mytype> B(4);
 		std::vector<mytype> C(input_elements);
+		std::vector<unsigned int> D(1);
 		size_t output_size = B.size()*sizeof(mytype);//size in bytes
 		cl::Buffer buffer_A(context, CL_MEM_READ_ONLY, input_size);
 		cl::Buffer buffer_B(context, CL_MEM_READ_WRITE, output_size);
-		cl::Buffer buffer_C(context, CL_MEM_READ_WRITE, output_size);
+		cl::Buffer buffer_C(context, CL_MEM_READ_WRITE, input_size);
+		cl::Buffer buffer_D(context, CL_MEM_READ_WRITE, 1 * sizeof(unsigned int));
 
 		// Device operations
 
 		// Copy buffer_a from A and setup other buffers for kernel operations
 		queue.enqueueWriteBuffer(buffer_A, CL_TRUE, 0, input_size, &A[0]);
 		queue.enqueueFillBuffer(buffer_B, 0, 0, output_size);//zero B buffer on device memory
-		queue.enqueueFillBuffer(buffer_C, 0, 0, output_size);//zero B buffer on device memory
+		queue.enqueueFillBuffer(buffer_C, 0, 0, input_size);//zero B buffer on device memory
+		queue.enqueueFillBuffer(buffer_D, 0, 0, 1 * sizeof(unsigned int));//zero B buffer on device memory
 
 		// Kernel Operation ================================
 		// Sum kernel
@@ -165,24 +168,28 @@ int main(int argc, char **argv) {
 		std::cout << "Mean:	" << mean/10.0f << std::endl;
 
 		// StD_variance kernel
-		cl::Kernel kernel_4 = cl::Kernel(program, "std_variance");
+		cl::Kernel kernel_4 = cl::Kernel(program, "std_variance_meansqr");
 		kernel_4.setArg(0, buffer_A);
 		kernel_4.setArg(1, buffer_C);
 		kernel_4.setArg(2, mean);
 		kernel_4.setArg(3, cl::Local(local_size * sizeof(mytype)));//local memory siz
 		queue.enqueueNDRangeKernel(kernel_4, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
-		queue.enqueueReadBuffer(buffer_C, CL_TRUE, 0, output_size, &C[0]); // Add kernel to queue
+		queue.enqueueReadBuffer(buffer_C, CL_TRUE, 0, input_size, &C[0]); // Add kernel to queue
 
 		// StD_sum kernel
-		cl::Kernel kernel_5 = cl::Kernel(program, "sum");
-		kernel_5.setArg(0, buffer_A);
-		kernel_5.setArg(1, buffer_B);
+		cl::Kernel kernel_5 = cl::Kernel(program, "std_sum");
+		kernel_5.setArg(0, buffer_C);
+		kernel_5.setArg(1, buffer_D);
 		kernel_5.setArg(2, cl::Local(local_size * sizeof(mytype)));//local memory size
 		queue.enqueueNDRangeKernel(kernel_5, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
-		queue.enqueueReadBuffer(buffer_B, CL_TRUE, 0, output_size, &B[3]); // Add kernel to queue
+		queue.enqueueReadBuffer(buffer_D, CL_TRUE, 0, 1 * sizeof(unsigned int), &D[0]); // Add kernel to queue
 
-		int std_mean = C[0] / A.size();
-		std::cout << "StD Variance:	" << std_mean << std::endl;
+		std::cout << "StD Sum:	" << D[0] << std::endl;
+		float std_mean = D[0] / C.size();
+		std_mean = sqrt(std_mean / 100.0f);
+		std::cout << "StD:	" << std_mean << std::endl;
+		
+
 		system("pause");
 	}
 	catch (cl::Error err) {

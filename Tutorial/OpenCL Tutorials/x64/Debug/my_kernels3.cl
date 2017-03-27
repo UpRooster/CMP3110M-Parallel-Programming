@@ -238,14 +238,18 @@ __kernel void gmax(__global const int* A, __global int* B, __local int* scratch)
 	
 }
 
-__kernel void std_variance(__global const int* A, __global const int* C, int mean, __local int* scratch) {
+__kernel void std_variance(__global const int* A, __global int* C, int mean, __local int* scratch) {
 	int id = get_global_id(0);
 	int lid = get_local_id(0);
 	
-	// Global to Local
-	scratch[lid] = A[id];
-	
-	scratch[lid] -= mean; // Calculate Variance
+	scratch[lid] = A[id]; // Copy values over
 
-	C[id] *= scratch[lid]; // Square the variance and assign to B
+	barrier(CLK_LOCAL_MEM_FENCE); // Wait for threads
+
+	for (int i = 1; i < N; i *= 2) {
+		if (!(lid % (i * 2)) && ((lid + i) < N)) 
+			scratch[lid] += scratch[lid + i];
+
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
 }
