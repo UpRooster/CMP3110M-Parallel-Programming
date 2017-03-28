@@ -1,53 +1,60 @@
 ﻿// Kernels
-__kernel void reduce_add_1(__global const int* A, __global int* B) {
+//a very simple histogram implementation
+/*__kernel void hist_simple(__global const int* A, __global int* H, int nr_bins) { 
 	int id = get_global_id(0);
-	int N = get_global_size(0);
 
-	B[id] = A[id]; //copy input to output
+	//assumes that H has been initialised to 0
+	int bin_index = A[id];//take value as a bin index
 
-	barrier(CLK_GLOBAL_MEM_FENCE); //wait for all threads to finish copying
-	 
-	//perform reduce on the output array
-	//modulo operator is used to skip a set of values (e.g. 2 in the next line)
-	//we also check if the added element is within bounds (i.e. < N)
-	if (((id % 2) == 0) && ((id + 1) < N)) 
-		B[id] += B[id + 1];
+	if (bin_index < nr_bins - 1)
+		int bin_index = nr_bins - 1;
 
-	barrier(CLK_GLOBAL_MEM_FENCE);
+	atomic_inc(&H[bin_index]);//serial operation, not very efficient!
+}*/
 
-	if (((id % 4) == 0) && ((id + 2) < N)) 
-		B[id] += B[id + 2];
+//a double-buffered version of the Hillis-Steele inclusive scan
+//requires two additional input arguments which correspond to two local buffers
 
-	barrier(CLK_GLOBAL_MEM_FENCE);
+__kernel void std_variance_meansqr(__global const int* A, __global int* C, int mean, int dataSize) {
+	int id = get_global_id(0);
 
-	if (((id % 8) == 0) && ((id + 4) < N)) 
-		B[id] += B[id + 4];
+	if (id < dataSize) // Account for padding
+		C[id] = A[id] - mean; // Subtract mean from all values
+	
+	barrier(CLK_LOCAL_MEM_FENCE); // Wait for threads
 
-	barrier(CLK_GLOBAL_MEM_FENCE);
-
-	if (((id % 16) == 0) && ((id + 8) < N)) 
-		B[id] += B[id + 8];
+	C[id] = (C[id] * C[id]) / 100.0f; // Square the result
 }
 
-//flexible step reduce 
-__kernel void reduce_add_2(__global const int* A, __global int* B) {
+
+
+__kernel void std_sum(__global const int* C, __global int* D, __local int* scratch) {
 	int id = get_global_id(0);
-	int N = get_global_size(0);
+	int lid = get_local_id(0);
+	int N = get_local_size(0);
 
-	B[id] = A[id];
+	//cache all N values from global memory to local memory
+	scratch[lid] = C[id];
 
-	barrier(CLK_GLOBAL_MEM_FENCE);
+	barrier(CLK_LOCAL_MEM_FENCE);//wait for all local threads to finish copying from global to local memory
 
-	for (int i = 1; i < N; i *= 2) { //i is a stride
-		if (!(id % (i * 2)) && ((id + i) < N)) 
-			B[id] += B[id + i];
+	for (int i = 1; i < N; i *= 2) {
+		if (!(lid % (i * 2)) && ((lid + i) < N)) 
+			scratch[lid] += scratch[lid + i];
 
-		barrier(CLK_GLOBAL_MEM_FENCE);
+		barrier(CLK_LOCAL_MEM_FENCE);
+	}
+
+	//we add results from all local groups to the first element of the array
+	//serial operation! but works for any group size
+	//copy the cache to output array
+	if (!lid) {
+		atomic_add(&D[0],scratch[lid]);
 	}
 }
-
-//reduce using local memory (so called privatisation)
-__kernel void reduce_add_3(__global const int* A, __global int* B, __local int* scratch) {
+//======================================================================================//
+//======================================Reduction=======================================//
+__kernel void sum(__global const int* A, __global int* B, __local int* scratch) {
 	int id = get_global_id(0);
 	int lid = get_local_id(0);
 	int N = get_local_size(0);
@@ -64,99 +71,12 @@ __kernel void reduce_add_3(__global const int* A, __global int* B, __local int* 
 		barrier(CLK_LOCAL_MEM_FENCE);
 	}
 
-	//copy the cache to output array
-	B[id] = scratch[lid];
-}
-
-// Reduction Kernel using Sequential Addressing
-__kernel void reduce_add_5(__global const int* A, __global int* B, __local int* scratch) {
-	int id = get_global_id(0);
-	int lid = get_local_id(0);
-	int N = get_local_size(0);
-
-	//cache all N values from global memory to local memory
-	scratch[lid] = A[id];
-
-	barrier(CLK_LOCAL_MEM_FENCE);//wait for all local threads to finish copying from global to local memory
-
-	for (int i = N / 2; i > 0; i >>= 2) {
-		if (lid < i)
-			scratch[lid] += scratch[lid + i];
-
-		barrier(CLK_LOCAL_MEM_FENCE);
-	}
-
 	//we add results from all local groups to the first element of the array
 	//serial operation! but works for any group size
 	//copy the cache to output array
 	if (!lid) {
 		atomic_add(&B[0],scratch[lid]);
 	}
-}
-
-//a very simple histogram implementation
-/*__kernel void hist_simple(__global const int* A, __global int* H, int nr_bins) { 
-	int id = get_global_id(0);
-
-	//assumes that H has been initialised to 0
-	int bin_index = A[id];//take value as a bin index
-
-	if (bin_index < nr_bins - 1)
-		int bin_index = nr_bins - 1;
-
-	atomic_inc(&H[bin_index]);//serial operation, not very efficient!
-}*/
-
-//a double-buffered version of the Hillis-Steele inclusive scan
-//requires two additional input arguments which correspond to two local buffers
-__kernel void scan_add(__global const int* A, __global int* B, __local int* scratch_1, __local int* scratch_2) {
-	int id = get_global_id(0);
-	int lid = get_local_id(0);
-	int N = get_local_size(0);
-	__local int *scratch_3;//used for buffer swap
-
-	//cache all N values from global memory to local memory
-	scratch_1[lid] = A[id];
-
-	barrier(CLK_LOCAL_MEM_FENCE);//wait for all local threads to finish copying from global to local memory
-
-	for (int i = 1; i < N; i *= 2) {
-		if (lid >= i)
-			scratch_2[lid] = scratch_1[lid] + scratch_1[lid - i];
-		else
-			scratch_2[lid] = scratch_1[lid];
-
-		barrier(CLK_LOCAL_MEM_FENCE);
-
-		//buffer swap
-		scratch_3 = scratch_2;
-		scratch_2 = scratch_1;
-		scratch_1 = scratch_3;
-	}
-
-	//copy the cache to output array
-	B[id] = scratch_1[lid];
-}
-
-//calculates the block sums
-__kernel void block_sum(__global const int* A, __global int* B, int local_size) {
-	int id = get_global_id(0);
-	B[id] = A[(id+1)*local_size-1];
-}
-
-//simple exclusive serial scan based on atomic operations - sufficient for small number of elements
-__kernel void scan_add_atomic(__global int* A, __global int* B) {
-	int id = get_global_id(0);
-	int N = get_global_size(0);
-	for (int i = id+1; i < N; i++)
-		atomic_add(&B[i], A[id]);
-}
-
-//adjust the values stored in partial scans by adding block sums to corresponding blocks
-__kernel void scan_add_adjust(__global int* A, __global const int* B) {
-	int id = get_global_id(0);
-	int gid = get_group_id(0);
-	A[id] += B[gid];
 }
 
 __kernel void gmin(__global const int* A, __global int* B, __local int* scratch) {
@@ -211,23 +131,28 @@ __kernel void gmax(__global const int* A, __global int* B, __local int* scratch)
 	
 }
 
-__kernel void std_variance_meansqr(__global const int* A, __global int* C, int mean, __local int* scratch) {
+//======================================================================================//
+//========================================Atomic========================================//
+
+__kernel void atomic_gmin(__global const int* A, __global int* B, __local int* scratch) {
 	int id = get_global_id(0);
 	int lid = get_local_id(0);
 	int N = get_local_size(0);
+
+	//cache all N values from global memory to local memory
+	scratch[lid] = A[id];
+
+	barrier(CLK_LOCAL_MEM_FENCE);//wait for all local threads to finish copying from global to local memory
+
+	//we add results from all local groups to the first element of the array
+	//serial operation! but works for any group size
+	//copy the cache to output array
 	
-	scratch[lid] = A[id]; // Copy values over
-
-	barrier(CLK_LOCAL_MEM_FENCE); // Wait for threads
-
-	scratch[lid] -= mean; // Subtract mean from all values
-
-	scratch[lid] *= scratch[lid]; // Square the result
-
-	C[id] = scratch[lid]; // Copy the values back to vector C
+	atomic_min(&B[3],scratch[lid]);
+	
 }
 
-__kernel void sum(__global const int* A, __global int* B, __local int* scratch) {
+__kernel void atomic_gmax(__global const int* A, __global int* B, __local int* scratch) {
 	int id = get_global_id(0);
 	int lid = get_local_id(0);
 	int N = get_local_size(0);
@@ -237,43 +162,10 @@ __kernel void sum(__global const int* A, __global int* B, __local int* scratch) 
 
 	barrier(CLK_LOCAL_MEM_FENCE);//wait for all local threads to finish copying from global to local memory
 
-	for (int i = 1; i < N; i *= 2) {
-		if (!(lid % (i * 2)) && ((lid + i) < N)) 
-			scratch[lid] += scratch[lid + i];
-
-		barrier(CLK_LOCAL_MEM_FENCE);
-	}
-
 	//we add results from all local groups to the first element of the array
 	//serial operation! but works for any group size
 	//copy the cache to output array
-	if (!lid) {
-		atomic_add(&B[0],scratch[lid]);
-	}
-}
-
-
-__kernel void std_sum(__global const int* A, __global int* B, __local int* scratch) {
-	int id = get_global_id(0);
-	int lid = get_local_id(0);
-	int N = get_local_size(0);
-
-	//cache all N values from global memory to local memory
-	scratch[lid] = A[id];
-
-	barrier(CLK_LOCAL_MEM_FENCE);//wait for all local threads to finish copying from global to local memory
-
-	for (int i = 1; i < N; i *= 2) {
-		if (!(lid % (i * 2)) && ((lid + i) < N)) 
-			scratch[lid] += scratch[lid + i];
-
-		barrier(CLK_LOCAL_MEM_FENCE);
-	}
-
-	//we add results from all local groups to the first element of the array
-	//serial operation! but works for any group size
-	//copy the cache to output array
-	if (!lid) {
-		atomic_add(&B[0],scratch[lid]);
-	}
+	
+	atomic_max(&B[4],scratch[lid]);
+	
 }

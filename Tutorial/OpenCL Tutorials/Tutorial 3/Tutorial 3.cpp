@@ -67,9 +67,11 @@ int main(int argc, char **argv) {
 		// Select compute device
 		cl::Context context = GetContext(platform_id, device_id);
 		// Show compute device
+		std::cout << "||----------------|----------------|----------------||" << std::endl;
 		std::cout << "Running on " << GetPlatformName(platform_id) << ", " << GetDeviceName(platform_id, device_id) << std::endl;
 		// Create command queue
-		cl::CommandQueue queue(context);
+		cl::CommandQueue queue(context, CL_QUEUE_PROFILING_ENABLE);
+		cl::Event prof_event1, prof_event2, prof_event3, prof_event4, prof_event5, prof_event6, prof_event7;
 		// Load kernels
 		cl::Program::Sources sources;
 		AddSources(sources, "my_kernels3.cl");
@@ -88,18 +90,20 @@ int main(int argc, char **argv) {
 
 		// Main Operation ================================
 		// Input File
-		std::cout << "Loading Input" << std::endl;
+		std::cout << "||----------------|----------------|----------------||" << std::endl;
+		std::cout << "Reading File.." << std::endl;
 		std::ifstream ifs("C:/Users/Computing/Desktop/CMP3110M-Parallel-Programming/Tutorial/OpenCL Tutorials/x64/Release/temp_lincolnshire.txt", std::ifstream::in);
 
 		// Strip Values
-		std::cout << "Acquiring Values" << std::endl;
+		std::cout << "Stripping Temp Values.." << std::endl;
 		msP = set_time();	// Set time
 		readFile(ifs);
 		get_time(msP);		// Get time taken
+
+		std::cout << "||----------------|----------------|----------------||" << std::endl;
+		std::cout << "Padding Array.." << std::endl;
 		std::cout << "Input Size:	" << A.size() << std::endl;
-		std::cout << "Padding!" << std::endl;
-
-
+		int dataSize = A.size();
 		// Apply padding to increase efficiency
 		size_t local_size = 32;
 		size_t padding_size = A.size() % local_size;
@@ -116,10 +120,9 @@ int main(int argc, char **argv) {
 		size_t input_size = A.size()*sizeof(mytype);//size in bytes
 		size_t nr_groups = input_elements / local_size;
 		std::cout << "With Padding:	" << A.size() << std::endl;
-		std::cout << "Creating Buffers" << std::endl;
-
+		std::cout << "Init Buffers.." << std::endl;
 		// Buffers for Kernel Operations
-		std::vector<mytype> B(4);
+		std::vector<mytype> B(5);
 		std::vector<mytype> C(input_elements);
 		std::vector<unsigned int> D(1);
 		size_t output_size = B.size()*sizeof(mytype);//size in bytes
@@ -143,6 +146,7 @@ int main(int argc, char **argv) {
 		kernel_1.setArg(1, buffer_B);
 		kernel_1.setArg(2, cl::Local(local_size*sizeof(mytype)));//local memory size
 		
+		// REDUCTION
 		// Min kernel
 		cl::Kernel kernel_2 = cl::Kernel(program, "gmin");
 		kernel_2.setArg(0, buffer_A);
@@ -155,39 +159,80 @@ int main(int argc, char **argv) {
 		kernel_3.setArg(1, buffer_B);
 		kernel_3.setArg(2, cl::Local(local_size * sizeof(mytype)));//local memory size
 
-		queue.enqueueNDRangeKernel(kernel_1, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
-		queue.enqueueNDRangeKernel(kernel_2, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
-		queue.enqueueNDRangeKernel(kernel_3, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
+		// ATOMIC
+		// Min kernel
+		cl::Kernel kernel_4 = cl::Kernel(program, "atomic_gmin");
+		kernel_4.setArg(0, buffer_A);
+		kernel_4.setArg(1, buffer_B);
+		kernel_4.setArg(2, cl::Local(local_size * sizeof(mytype)));//local memory siz
+
+		// Max kernel
+		cl::Kernel kernel_5 = cl::Kernel(program, "atomic_gmax");
+		kernel_5.setArg(0, buffer_A);
+		kernel_5.setArg(1, buffer_B);
+		kernel_5.setArg(2, cl::Local(local_size * sizeof(mytype)));//local memory size
+
+		queue.enqueueNDRangeKernel(kernel_1, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event1); // Call kernel in sequence
+		queue.enqueueNDRangeKernel(kernel_2, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event2); // Call kernel in sequence
+		queue.enqueueNDRangeKernel(kernel_3, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event3); // Call kernel in sequence
+		queue.enqueueNDRangeKernel(kernel_4, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event4); // Call kernel in sequence
+		queue.enqueueNDRangeKernel(kernel_5, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event5); // Call kernel in sequence
 		queue.enqueueReadBuffer(buffer_B, CL_TRUE, 0, output_size, &B[0]); // Add kernel to queue
 		
 		int mean = B[0] / A.size();
-		
-		std::cout << "Sum:	" << B[0] << std::endl;
-		std::cout << "Min:	" << B[1]/10.0f << std::endl;
-		std::cout << "Max:	" << B[2]/10.0f << std::endl;
-		std::cout << "Mean:	" << mean/10.0f << std::endl;
 
 		// StD_variance kernel
-		cl::Kernel kernel_4 = cl::Kernel(program, "std_variance_meansqr");
-		kernel_4.setArg(0, buffer_A);
-		kernel_4.setArg(1, buffer_C);
-		kernel_4.setArg(2, mean);
-		kernel_4.setArg(3, cl::Local(local_size * sizeof(mytype)));//local memory siz
-		queue.enqueueNDRangeKernel(kernel_4, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
+		cl::Kernel kernel_6 = cl::Kernel(program, "std_variance_meansqr");
+		kernel_6.setArg(0, buffer_A);
+		kernel_6.setArg(1, buffer_C);
+		kernel_6.setArg(2, mean);
+		kernel_6.setArg(3, dataSize);
+		queue.enqueueNDRangeKernel(kernel_6, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event6); // Call kernel in sequence
 		queue.enqueueReadBuffer(buffer_C, CL_TRUE, 0, input_size, &C[0]); // Add kernel to queue
 
+		// cout << C;
+
 		// StD_sum kernel
-		cl::Kernel kernel_5 = cl::Kernel(program, "std_sum");
-		kernel_5.setArg(0, buffer_C);
-		kernel_5.setArg(1, buffer_D);
-		kernel_5.setArg(2, cl::Local(local_size * sizeof(mytype)));//local memory size
-		queue.enqueueNDRangeKernel(kernel_5, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size)); // Call kernel in sequence
+		cl::Kernel kernel_7 = cl::Kernel(program, "std_sum");
+		kernel_7.setArg(0, buffer_C);
+		kernel_7.setArg(1, buffer_D);
+		kernel_7.setArg(2, cl::Local(local_size * sizeof(mytype)));//local memory size
+		queue.enqueueNDRangeKernel(kernel_7, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &prof_event7); // Call kernel in sequence
 		queue.enqueueReadBuffer(buffer_D, CL_TRUE, 0, 1 * sizeof(unsigned int), &D[0]); // Add kernel to queue
 
+		std::cout << "||----------------|----------------|----------------||" << std::endl;
+		std::cout << "[Reduction] Statistical/Mathematical Operations\n" << std::endl;
+		std::cout << "Sum:	" << B[0] << std::endl;
+		std::cout << "Reduction Min:	" << B[1] / 10.0f << std::endl;
+
+		std::cout << "Reduction Max:	" << B[2] / 10.0f << std::endl;
+
+		std::cout << "Atomic Min:	" << B[3] / 10.0f << std::endl;
+
+		std::cout << "Atomic Max:	" << B[4] / 10.0f << std::endl;
+
+		std::cout << "Mean:	" << mean / 10.0f << std::endl;
+
 		std::cout << "StD Sum:	" << D[0] << std::endl;
+
 		float std_mean = D[0] / C.size();
-		std_mean = sqrt(std_mean / 100.0f);
-		std::cout << "StD:	" << std_mean << std::endl;
+		std::cout << "StD Mean:	" << std_mean << std::endl;
+		float std_sqrt = sqrt(std_mean);
+		std::cout << "St Deviation:	" << std_sqrt << std::endl;
+
+		std::cout << "||----------------|----------------|----------------||" << std::endl;
+		std::cout << "Statistical/Mathematical Operational Runtime" << std::endl;
+		std::cout << "||----------------|----------------|----------------|| [Reduction]" << std::endl;
+		std::cout << "Reduction Sum execution time[ns]:" << prof_event1.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event1.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Reduction Min execution time[ns]:" << prof_event2.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event2.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Reduction Max execution time[ns]:" << prof_event3.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event3.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "||----------------|----------------|----------------|| [Atomic]" << std::endl;
+		std::cout << "Atomic Min execution time[ns]:" << prof_event4.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event4.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "Atomic Max execution time[ns]:" << prof_event5.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event5.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "||----------------|----------------|----------------|| [Standard Deviation]" << std::endl;
+		std::cout << "StD Mean/Square execution time[ns]:" << prof_event6.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event6.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+		std::cout << "StD Sum execution time[ns]:" << prof_event7.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event7.getProfilingInfo<CL_PROFILING_COMMAND_START>() << std::endl;
+
 		
 
 		system("pause");

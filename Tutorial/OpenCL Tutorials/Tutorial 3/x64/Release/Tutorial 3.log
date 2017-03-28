@@ -2,12 +2,13 @@
 Tutorial 3.cpp(29): warning C4244: 'initializing': conversion from '__int64' to 'float', possible loss of data
 Tutorial 3.cpp(33): warning C4244: 'initializing': conversion from '__int64' to 'float', possible loss of data
 Tutorial 3.cpp(47): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
-Tutorial 3.cpp(163): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-Tutorial 3.cpp(188): warning C4244: 'initializing': conversion from 'unsigned __int64' to 'float', possible loss of data
+Tutorial 3.cpp(106): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+Tutorial 3.cpp(182): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+Tutorial 3.cpp(218): warning C4244: 'initializing': conversion from 'unsigned __int64' to 'float', possible loss of data
   Generating code
-  2 of 780 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+  2 of 790 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    4 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   Tutorial 3.vcxproj -> C:\Users\Computing\Desktop\CMP3110M-Parallel-Programming\Tutorial\OpenCL Tutorials\x64\Release\Tutorial 3.exe
   Tutorial 3.vcxproj -> C:\Users\Computing\Desktop\CMP3110M-Parallel-Programming\Tutorial\OpenCL Tutorials\x64\Release\Tutorial 3.pdb (Full PDB)
